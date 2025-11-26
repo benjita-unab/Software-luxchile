@@ -547,6 +547,7 @@ function HomePage({ user = "" }) {
    STOCK
    =========================== */
 function StockPage() {
+  const isAdmin = (getAuth()?.user?.role === 'admin');
   const [activeTab, setActiveTab] = useState("listado"); // "listado" o "consultar"
   
   // Estado para consulta individual
