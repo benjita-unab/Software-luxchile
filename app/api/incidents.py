@@ -3,15 +3,21 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from app.models.schemas import IncidentCreate
 from app.services.incident_service import registrar_incidente
 from app.db.conn import get_db
+from app.db.database import get_db as get_sqlalchemy_db
 import sqlite3
 from app.core.security import get_current_user, require_role, AuthUser
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 
 @router.post("/registrar")
-def registrar(data: IncidentCreate, user: AuthUser = Depends(get_current_user)):
+def registrar(
+    data: IncidentCreate, 
+    user: AuthUser = Depends(get_current_user),
+    db: Session = Depends(get_sqlalchemy_db)
+):
     try:
-        return registrar_incidente(data)
+        return registrar_incidente(data, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
