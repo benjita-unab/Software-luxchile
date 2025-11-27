@@ -8,6 +8,7 @@ import {
   Navigate,
   useNavigate,
 } from "react-router-dom";
+import { generateAsignacionesPDF, generateIncidentesPDF } from "./utils/pdfGenerator";
 
 /* ===========================
    LOGO CORPORATIVO
@@ -1164,16 +1165,31 @@ function IncidentSuccess({ resp, onReset }) {
 function IncidentesPage() {
   const TIPOS = ["DESVIO_RUTA", "DETENCION_NO_PROGRAMADA", "ACCIDENTE", "ROBO", "OTRO"];
 
-  const [cargaIdSolo, setCargaIdSolo] = useState("123");
-  const [vehicleId, setVehicleId] = useState("CAMION-88");
-  const [rut, setRut] = useState("21421299-4");
+  const [cargaIdSolo, setCargaIdSolo] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
+  const [rut, setRut] = useState("");
   const [tipo, setTipo] = useState(TIPOS[0]);
-  const [description, setDescription] = useState("Desvio por accidente");
-  const [address, setAddress] = useState("Santiago, Chile");
+  const [description, setDescription] = useState("");
+  const [address, setAddress] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [resp, setResp] = useState(null);
+  const [incidentes, setIncidentes] = useState([]);
+  const navigate = useNavigate();
+
+  // Cargar incidentes para el botón PDF
+  useEffect(() => {
+    async function loadIncidentes() {
+      try {
+        const data = await api("/incidentes?limit=50");
+        setIncidentes(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error("Error cargando incidentes:", e);
+      }
+    }
+    loadIncidentes();
+  }, [resp]); // Recargar cuando se registre un nuevo incidente
 
   const reset = () => {
     setResp(null);
@@ -1225,13 +1241,35 @@ function IncidentesPage() {
   return (
     <section className="mx-auto max-w-6xl">
       <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="flex items-center gap-3 border-b bg-slate-50/70 px-4 py-3">
-          <span className="text-slate-600 text-xl">🚨</span>
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">Registrar Incidente</h2>
-            <p className="text-sm text-slate-500">
-              Completa los datos del evento. Geocodificaremos la Direccion automaticamente.
-            </p>
+        <div className="flex items-center justify-between border-b bg-slate-50/70 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-slate-600 text-xl">🚨</span>
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900">Registrar Incidente</h2>
+              <p className="text-sm text-slate-500">
+                Completa los datos del evento. Geocodificaremos la Direccion automaticamente.
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {incidentes.length > 0 && (
+              <button
+                onClick={() => generateIncidentesPDF(incidentes)}
+                className="rounded-lg bg-rose-600 text-white px-3 py-1.5 text-sm hover:bg-rose-700 flex items-center gap-2"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+                </svg>
+                PDF
+              </button>
+            )}
+            <button
+              onClick={() => navigate('/incidentes/historial')}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 flex items-center gap-1"
+            >
+              📋 Ver historial
+            </button>
           </div>
         </div>
 
@@ -1334,11 +1372,11 @@ function IncidentesPage() {
    =========================== */
 function AsignacionesPage() {
   // Formulario
-  const [cargoId, setCargoId] = useState("CARGA-1001");
-  const [responsableRut, setResponsableRut] = useState("21.421.299-4");
-  const [vehiculoId, setVehiculoId] = useState("CAMION-12");
-  const [origen, setOrigen] = useState("Bodega Central, Santiago");
-  const [destino, setDestino] = useState("Cliente XYZ, Vina del Mar");
+  const [cargoId, setCargoId] = useState("");
+  const [responsableRut, setResponsableRut] = useState("");
+  const [vehiculoId, setVehiculoId] = useState("");
+  const [origen, setOrigen] = useState("");
+  const [destino, setDestino] = useState("");
   const [fechaHora, setFechaHora] = useState("");
   const [prioridad, setPrioridad] = useState("MEDIA");
   const [notas, setNotas] = useState("");
@@ -1404,8 +1442,14 @@ function AsignacionesPage() {
         scheduled_at: fechaHora || null,
       };
 
-      await api("/asignaciones", { method: "POST", body: payload });
+      const newAsignacion = await api("/asignaciones", { method: "POST", body: payload });
       setOkMsg("OK asignacion creada correctamente.");
+      
+      // Generar PDF automáticamente
+      if (newAsignacion) {
+        generateAsignacionesPDF([newAsignacion]);
+      }
+      
       // limpiar minimos
       setNotas("");
       // refrescar listado
@@ -1452,15 +1496,53 @@ function AsignacionesPage() {
  
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
         {/* Header */}
-        <div className="flex items-center gap-3 p-4 md:p-5 bg-slate-50/70">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-white ring-1 ring-slate-200">
-            <svg width="22" height="22" viewBox="0 0 24 24" className="text-slate-600">
-              <path fill="currentColor" d="M3 7h8v10H3zM13 7h8v6h-8zM13 15h8v2h-8z" />
-            </svg>
+        <div className="flex items-center justify-between p-4 md:p-5 bg-slate-50/70">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-white ring-1 ring-slate-200">
+              <svg width="22" height="22" viewBox="0 0 24 24" className="text-slate-600">
+                <path fill="currentColor" d="M3 7h8v10H3zM13 7h8v6h-8zM13 15h8v2h-8z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-xl md:text-2xl font-semibold text-slate-900">Asignar carga</h2>
+              <p className="text-sm text-slate-500">Define responsable, vehiculo y direcciones.</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl md:text-2xl font-semibold text-slate-900">Asignar carga</h2>
-            <p className="text-sm text-slate-500">Define responsable, vehiculo y direcciones.</p>
+          
+          {/* Acciones rápidas */}
+          <div className="flex items-center gap-2">
+            {items.length > 0 && (
+              <div className="flex items-center gap-2">
+                <select
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm bg-white hover:bg-slate-50"
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      completarAsignacion(Number(e.target.value));
+                      e.target.value = "";
+                    }
+                  }}
+                  disabled={completingId !== null}
+                >
+                  <option value="">✓ Completar asignación...</option>
+                  {items.filter(a => (a.status || a.estado) !== "ENTREGADA").map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.cargo_id} - {a.responsable?.rut || a.employee_id}
+                    </option>
+                  ))}
+                </select>
+                
+                <button
+                  onClick={() => generateAsignacionesPDF(items)}
+                  className="rounded-lg bg-rose-600 text-white px-3 py-1.5 text-sm hover:bg-rose-700 flex items-center gap-2"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+                  </svg>
+                  PDF
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1623,15 +1705,7 @@ function AsignacionesPage() {
                         </span>
                       </td>
                       <td className="py-2 px-4 space-x-2">
-                        {/* Botón Completar - disponible para todos */}
-                        <button 
-                          onClick={() => completarAsignacion(a.id)} 
-                          disabled={completingId === a.id}
-                          className="rounded-lg bg-emerald-600 text-white px-2 py-1 text-xs hover:bg-emerald-700 disabled:opacity-50"
-                        >
-                          {completingId === a.id ? 'Completando...' : '✓ Completar'}
-                        </button>
-                        
+                        {/* Botón Completar - movido al header */}
                         {/* Botón Eliminar - solo admin */}
                         {isAdmin && (
                           <button
@@ -1706,13 +1780,27 @@ function IncidentesHistPage() {
               <p className="text-sm text-slate-500">Ultimos registrados</p>
             </div>
           </div>
-          <button
-            onClick={fetchAll}
-            disabled={loading}
-            className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
-          >
-            {loading ? "Actualizando...��" : "Actualizar"}
-          </button>
+          
+          <div className="flex items-center gap-2">
+            {items.length > 0 && (
+              <button
+                onClick={() => generateIncidentesPDF(items)}
+                className="rounded-lg bg-rose-600 text-white px-3 py-1.5 text-sm hover:bg-rose-700 flex items-center gap-2"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+                </svg>
+                PDF
+              </button>
+            )}
+            <button
+              onClick={fetchAll}
+              disabled={loading}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+            >
+              {loading ? "Actualizando..." : "Actualizar"}
+            </button>
+          </div>
         </div>
 
         <div className="p-4 md:p-6">
